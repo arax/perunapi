@@ -20,20 +20,24 @@ define perunapi::facility (
 
   ####
 
-  $_query = perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'getFacilityByName',
-                           { 'name' => $title }, $cluster)
+  $_query = perunapi::call(
+    $api_host, $api_user, $api_passwd, 'facilitiesManager', 'getFacilityByName',
+    { 'name' => $title }, $cluster
+  )
 
   if $_query['name'] == 'FacilityNotExistsException' {
-    notify{ 'create_facility':
-       message => "Creating facility ${title}",
+    notify { 'create_facility':
+      message => "Creating facility ${title}",
     }
 
     $_createfacility_req = { 'facility' => { 'id' => 0, 'name' => $title, 'description' => $description } }
-    $_facility_result = perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'createFacility',
-                                       $_createfacility_req, $cluster)
+    $_facility_result = perunapi::call(
+      $api_host, $api_user, $api_passwd, 'facilitiesManager', 'createFacility',
+      $_createfacility_req, $cluster
+    )
 
     if $_facility_result['id'] {
-       $_facility_id = $_facility_result['id']
+      $_facility_id = $_facility_result['id']
     }
   } else {
     if $_query['id'] {
@@ -47,8 +51,10 @@ define perunapi::facility (
 
   ####
 
-  $_query_admin_users = perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'getAdmins',
-                                       { 'facility' => $_facility_id, 'onlyDirectAdmins' => 'true' }, $cluster)
+  $_query_admin_users = perunapi::call(
+    $api_host, $api_user, $api_passwd, 'facilitiesManager', 'getAdmins',
+    { 'facility' => $_facility_id, 'onlyDirectAdmins' => true }, $cluster
+  )
   $_adm_users = $_query_admin_users.map |$_user| { $_user['lastName'] }
   $_add_adm_users = $manager['users'] - $_adm_users
 
@@ -57,43 +63,57 @@ define perunapi::facility (
       message => "Adding admin user ${_user}",
     }
 
-    $_query_user = perunapi::call($api_host, $api_user, $api_passwd, 'membersManager', 'findMembersInVo',
-                                  { 'searchString' => $_user, 'vo' => $vo }, $cluster)
+    $_query_user = perunapi::call(
+      $api_host, $api_user, $api_passwd, 'membersManager', 'findMembersInVo',
+      { 'searchString' => $_user, 'vo' => $vo }, $cluster
+    )
+
     if empty($_query_user) {
       fail("Did not find user ${_user}")
     }
     $_user_id = $_query_user[0]['userId']
 
-    perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'addAdmin',
-                   { 'facility' => $_facility_id , 'user' => $_user_id }, $cluster)
+    perunapi::call(
+      $api_host, $api_user, $api_passwd, 'facilitiesManager', 'addAdmin',
+      { 'facility' => $_facility_id , 'user' => $_user_id }, $cluster
+    )
   }
 
   ####
 
-  $_query_admin_groups = perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'getAdminGroups',
-                                        {'facility' => $_facility_id}, $cluster)
+  $_query_admin_groups = perunapi::call(
+    $api_host, $api_user, $api_passwd, 'facilitiesManager', 'getAdminGroups',
+    {'facility' => $_facility_id}, $cluster
+  )
   $_adm_groups = $_query_admin_groups.map |$_group| { $_group['name'] }
   $_add_adm_groups = $manager['groups'] - $_adm_groups
 
   $_add_adm_groups.each |$_group| {
     notify{ 'addAdminGroups':
-       message => "Adding admin group ${_group}",
+      message => "Adding admin group ${_group}",
     }
 
-    $_query_group = perunapi::call($api_host, $api_user, $api_passwd, 'groupsManager', 'getGroupByName',
-                                   { 'name' => $_group, 'vo' => $vo }, $cluster)
+    $_query_group = perunapi::call(
+      $api_host, $api_user, $api_passwd, 'groupsManager', 'getGroupByName',
+      { 'name' => $_group, 'vo' => $vo }, $cluster
+    )
+
     if empty($_query_group) {
       fail("Did not find group ${_group}")
     }
 
-    perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'addAdmin',
-                   { 'facility' => $_facility_id , 'authorizedGroup' => $_query_group['id'] }, $cluster)
+    perunapi::call(
+      $api_host, $api_user, $api_passwd, 'facilitiesManager', 'addAdmin',
+      { 'facility' => $_facility_id , 'authorizedGroup' => $_query_group['id'] }, $cluster
+    )
   }
 
   ####
 
-  $_query_owners = perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'getOwners',
-                                  { 'facility' => $_facility_id }, $cluster)
+  $_query_owners = perunapi::call(
+    $api_host, $api_user, $api_passwd, 'facilitiesManager', 'getOwners',
+    { 'facility' => $_facility_id }, $cluster
+  )
   $_owners = $_query_owners.map |$_owner| { $_owner['name'] }
   $_add_owners = $owner - $_owners
 
@@ -106,24 +126,30 @@ define perunapi::facility (
         message => "Adding owner with ID ${_id} to facility ${title}",
       }
 
-      perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'addOwner',
-                     { 'facility' => $_facility_id, 'owner' => $_id }, $cluster)
+      perunapi::call(
+        $api_host, $api_user, $api_passwd, 'facilitiesManager', 'addOwner',
+        { 'facility' => $_facility_id, 'owner' => $_id }, $cluster
+      )
     }
   }
 
   ####
 
-  $_query_hosts = perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'getHosts',
-                                 { 'facility' => $_facility_id }, $cluster)
+  $_query_hosts = perunapi::call(
+    $api_host, $api_user, $api_passwd, 'facilitiesManager', 'getHosts',
+    { 'facility' => $_facility_id }, $cluster
+  )
   $_query_hostnames = $_query_hosts.map |$_host| { $_host['hostname'] }
 
-  unless $facts['fqdn'] in $_query_hostnames {
+  unless $facts['networking']['fqdn'] in $_query_hostnames {
     notify { 'addHost_self':
-      message => "Adding host ${facts['fqdn']} to facility ${title}",
+      message => "Adding host ${facts['networking']['fqdn']} to facility ${title}",
     }
 
-    perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'addHost',
-                   { 'facility' => $_facility_id, 'hostname' => $facts['fqdn'] }, $cluster)
+    perunapi::call(
+      $api_host, $api_user, $api_passwd, 'facilitiesManager', 'addHost',
+      { 'facility' => $_facility_id, 'hostname' => $facts['networking']['fqdn'] }, $cluster
+    )
   }
 
   $_add_customhosts = $customhosts - $_query_hostnames
@@ -133,12 +159,16 @@ define perunapi::facility (
       message => "Adding host ${_host} to facility ${title}",
     }
 
-    perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'addHost',
-                   { 'facility' => $_facility_id, 'hostname' => $_host }, $cluster)
+    perunapi::call(
+      $api_host, $api_user, $api_passwd, 'facilitiesManager', 'addHost',
+      { 'facility' => $_facility_id, 'hostname' => $_host }, $cluster
+    )
   }
 
-  $_dbhosts = puppetdb_query("resources { type = 'Perunapi::Host' and parameters.cluster = '${cluster}' }")
-                .map |$_db_resource| { $_db_resource['parameters']['hostname'] }
+  $_dbhosts = puppetdb_query(
+    "resources { type = 'Perunapi::Host' and parameters.cluster = '${cluster}' }"
+  ).map |$_db_resource| { $_db_resource['parameters']['hostname'] }
+
   $_live_hosts = concat($_dbhosts, $customhosts)
   $_remove_hosts = $_query_hostnames - $_live_hosts
 
@@ -148,17 +178,21 @@ define perunapi::facility (
     }
 
     $_hostid = $_query_hosts.filter |$_f_host| { $_f_host['hostname'] == $_remove_host }
-    perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'removeHost',
-                   { "host" => $_hostid[0]['id'] }, $cluster)
+    perunapi::call(
+      $api_host, $api_user, $api_passwd, 'facilitiesManager', 'removeHost',
+      { 'host' => $_hostid[0]['id'] }, $cluster
+    )
   }
 
   ####
 
   $_filtered_data = $attributes.filter |$key, $value| { $key =~ /:facility:/ }
 
-  $_tmp_array = $_filtered_data.reduce([]) |Array $memo, Array $_item| {
-    $_attribute = perunapi::call($api_host, $api_user, $api_passwd, 'attributesManager', 'getAttribute',
-                                 {'facility' => $_facility_id, 'attributeName' => $_item[0]}, $cluster)
+  $_final_array = $_filtered_data.reduce([]) |Array $memo, Array $_item| {
+    $_attribute = perunapi::call(
+      $api_host, $api_user, $api_passwd, 'attributesManager', 'getAttribute',
+      {'facility' => $_facility_id, 'attributeName' => $_item[0]}, $cluster
+    )
 
     if $_attribute['id'] {
       $_newattr = $_item[1] ? {
@@ -178,35 +212,42 @@ define perunapi::facility (
     }
   }
 
-  unless empty($_final) {
-    $_attributes_result = perunapi::call($api_host, $api_user, $api_passwd, 'attributesManager', 'setAttributes',
-                                         { 'facility' => $_facility_id, 'attributes' => $_final }, $cluster)
+  unless empty($_final_array) {
+    $_attributes_result = perunapi::call(
+      $api_host, $api_user, $api_passwd, 'attributesManager', 'setAttributes',
+      { 'facility' => $_facility_id, 'attributes' => $_final_array }, $cluster
+    )
 
     if $_attributes_result['timeout'] {
       return()
     }
 
     if $_attributes_result['errorId'] and $_attributes_result['message'] {
-      fail("Cannot set attributes. Reason: ${_attributes_result['message']} Attributes: ${_final}")
+      fail("Cannot set attributes. Reason: ${_attributes_result['message']} Attributes: ${_final_array}")
     }
   }
 
   ####
 
   $services.each |$_service, $_service_hash| {
-    $_service_result = perunapi::call($api_host, $api_user, $api_passwd, 'servicesManager', 'getServiceByName',
-                                      {'name' => $_service}, $cluster)
+    $_service_result = perunapi::call(
+      $api_host, $api_user, $api_passwd, 'servicesManager', 'getServiceByName',
+      {'name' => $_service}, $cluster
+    )
+
     if $_service_result['errorId'] and $_service_result['message'] {
-       fail("Cannot get service ID for ${_service}")
+      fail("Cannot get service ID for ${_service}")
     }
 
     $_destination = $_service_hash['destination'] ? {
-      'all'   => $facts['fqdn'],
+      'all'   => $facts['networking']['fqdn'],
       default => $_service_hash['destination'],
     }
 
-    $_dest_res = perunapi::call($api_host, $api_user, $api_passwd, 'servicesManager', 'getDestinations',
-                                {'service' => $_service_result['id'], 'facility' => $_facility_id}, $cluster)
+    $_dest_res = perunapi::call(
+      $api_host, $api_user, $api_passwd, 'servicesManager', 'getDestinations',
+      {'service' => $_service_result['id'], 'facility' => $_facility_id}, $cluster
+    )
     $_assigned_dests = $_dest_res.map |$_dest| { $_dest['destination'] }
 
     unless $_destination in $_assigned_dests {
@@ -219,9 +260,17 @@ define perunapi::facility (
         default  => 'PARALLEL',
       }
 
-      perunapi::call($api_host, $api_user, $api_passwd, 'servicesManager', 'addDestination',
-                     { 'service' => $_service_result['id'], 'facility' => $_facility_id, 'destination' => $_destination,
-                     'type' => $_service_hash['type'], 'propagationType' => $_propagation }, $cluster)
+      perunapi::call(
+        $api_host, $api_user, $api_passwd, 'servicesManager', 'addDestination',
+        {
+          'service' => $_service_result['id'],
+          'facility' => $_facility_id,
+          'destination' => $_destination,
+          'type' => $_service_hash['type'],
+          'propagationType' => $_propagation
+        },
+        $cluster
+      )
     }
 
     # remove only services on 'all' hosts, do not remove named hosts. hack for pbsmon_service
@@ -229,11 +278,18 @@ define perunapi::facility (
       $_remove_dests = $_assigned_dests - $_live_hosts
 
       $_remove_dests.each |$_r_dest| {
-        perunapi::call($api_host, $api_user, $api_passwd, 'servicesManager', 'removeDestination',
-                       { 'service' => $_service_result['id'], 'facility' => $_facility_id, 'destination' => $_r_dest,
-                       'type' => $_service_hash['type'] }, $cluster)
+        perunapi::call(
+          $api_host, $api_user, $api_passwd, 'servicesManager', 'removeDestination',
+          {
+            'service' => $_service_result['id'],
+            'facility' => $_facility_id,
+            'destination' => $_r_dest,
+            'type' => $_service_hash['type']
+          },
+          $cluster
+        )
 
-        notify { "removeDest${_r_dest}${_service_id}":
+        notify { "removeDest${_r_dest}${_service_result['id']}":
           message => "Removed destination ${_r_dest} for service ${_service}",
         }
       }

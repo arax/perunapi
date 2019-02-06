@@ -12,22 +12,25 @@ class perunapi (
     fail('Facility not specified, cannot continue')
   }
 
-  $_query = perunapi::call($perun_api_host, $perun_api_user, $perun_api_password, 'vosManager', 'getVoByShortName',
-                           { 'shortName' => $_perunapi['facility']['vo'] }, $cluster)
+  $_query = perunapi::call(
+    $perun_api_host, $perun_api_user, $perun_api_password, 'vosManager', 'getVoByShortName',
+    { 'shortName' => $_perunapi['facility']['vo'] }, $cluster
+  )
+
   if empty($_query) {
     fail("Cannot get VO ${_perunapi['facility']['vo']} ID")
   }
 
   perunapi::facility { $_perunapi['facility']['name']:
-    ensure       => present,
-    description  => $_perunapi['facility']['description'],
-    manager      => $_perunapi['facility']['manager'],
-    owner        => $_perunapi['facility']['owner'],
-    vo           => $_query['id'],
-    customhosts  => $_perunapi['facility']['customhosts'],
-    cluster      => $cluster,
-    attributes   => $_perunapi['attributes'],
-    services     => $_perunapi['services'],
+    ensure      => present,
+    description => $_perunapi['facility']['description'],
+    manager     => $_perunapi['facility']['manager'],
+    owner       => $_perunapi['facility']['owner'],
+    vo          => $_query['id'],
+    customhosts => $_perunapi['facility']['customhosts'],
+    cluster     => $cluster,
+    attributes  => $_perunapi['attributes'],
+    services    => $_perunapi['services'],
   }
 
   if $_perunapi['resources'] {

@@ -7,10 +7,10 @@ class perunapi::params {
   $cluster = $trusted['domain'] =~ /cloud\.muni\.cz$/ ? {
     true    => $facts['is_cluster'] ? {
       true    => $facts['cluster']['full_name'],
-      default => $facts['fqdn'],
+      default => $facts['networking']['fqdn'],
     },
     default => empty($facts['clusterfullname']) ? {
-      true    => $facts['fqdn'],
+      true    => $facts['networking']['fqdn'],
       default => $facts['clusterfullname'],
     },
   }
