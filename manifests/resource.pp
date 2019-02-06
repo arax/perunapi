@@ -1,221 +1,219 @@
 define perunapi::resource (
-       $ensure     = 'present',
-  Hash $resource   = {},
-  String $facility = '',
-  Hash $attributes = {},
-  Hash $services   = {},
+  String                    $facility,
+  Hash                      $resource,
+  Stdlib::Fqdn              $context,
+  Enum['present', 'absent'] $ensure     = 'present',
+  Hash                      $attributes = {},
+  Hash                      $services   = {},
 ) {
 
-  if $ensure == 'present' {
+  if $ensure == 'absent' {
+    fail('Cannot remove Resource via perunapi::resource, not implemented')
+  }
 
-    $_query_fa = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                               'facilitiesManager', 'getFacilityByName', {'name' => $facility}, $facility)
+  $api_user   = $perunapi::perun_api_user
+  $api_host   = $perunapi::perun_api_host
+  $api_passwd = $perunapi::perun_api_password
 
-    if $_query_fa['id'] != undef {
-       $_facility_id = $_query_fa['id']
-    } else {
-       fail("No facility named ${facility}")
+  ####
+
+  $_query_fa = perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'getFacilityByName',
+                              { 'name' => $facility }, $context)
+
+  unless $_query_fa['id'] {
+    fail("No facility named ${facility}")
+  }
+  $_facility_id = $_query_fa['id']
+
+  ####
+
+  $_query_vo = perunapi::call($api_host, $api_user, $api_passwd, 'vosManager', 'getVoByShortName',
+                              { 'shortName' => $resource['vo'] }, $context)
+
+  unless $_query_vo['id'] {
+    fail("No VO named ${resource['vo']}")
+  }
+  $_vo_id = $_query_vo['id']
+
+  $_query_res = perunapi::call($api_host, $api_user, $api_passwd, 'resourcesManager', 'getResourceByName',
+                               { 'vo' => $_vo_id, 'facility' => $_facility_id, 'name' => $resource['name'] },
+                               $context)
+
+  if $_query_res['id'] {
+    $_resource_id = $_query_res['id']
+  } else {
+    $_create_res = perunapi::call($api_host, $api_user, $api_passwd, 'resourcesManager', 'createResource',
+                                  { 'resource' => { 'name' => $resource['name'], 'description' => $resource['description'] },
+                                  'vo' => $_vo_id, 'facility' => $_facility_id }, $context)
+    $_resource_id = $_create_res['id']
+
+    notify { "createResource${resource['name']}${resource['vo']}":
+      message => "Created resource ${resource['name']} for VO ${resource['vo']}",
+    }
+  }
+
+  ####
+
+  if $resource['tags'] {
+    $_query_tags = perunapi::call($api_host, $api_user, $api_passwd, 'resourcesManager', 'getAllResourcesTagsForResource',
+                                 { 'resource' => $_resource_id }, $context)
+    $_tags_name = $_query_tags.map |$_tag_obj| { $_tag_obj['tagName'] }
+
+    $_query_all_tags = perunapi::call($api_host, $api_user, $api_passwd, 'resourcesManager', 'getAllResourcesTagsForVo',
+                                     {'vo' => $_vo_id }, $context)
+
+    $resource['tags'].each |$_tag| {
+      unless $_tag in $_tags_name {
+        $_tag_obj = $_query_all_tags.filter |$_t| { $_t['tagName'] == $_tag }
+        if empty($_tag_obj) {
+          fail("Unknown tag ${_tag}")
+        }
+
+        perunapi::call($api_host, $api_user, $api_passwd, 'resourcesManager', 'assignResourceTagToResource',
+                       { 'resourceTag' => $_tag_obj[0], 'resource' => $_resource_id }, $context)
+
+        notify { "setTagForResource${_resource_id}${_tag}":
+          message => "Assigned resource tag ${_tag} to resource ${resource['name']}",
+        }
+      }
+    }
+  }
+
+  ####
+
+  $_tmp_attributes = merge($attributes, $resource['attributes'])
+
+  unless empty($_tmp_attributes) {
+    $_pending_a = perunapi::callback($api_host, $api_user, $api_passwd, 'setAttribute', $context)
+    if $_pending_a['endTime'] == -1 {
+      notify { "setAttributeTimeout${_resource_id}":
+        message => "Pending set attribute request. Giving up.",
+      }
+
+      return()
     }
 
-    $_query_vo = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                'vosManager', 'getVoByShortName', {'shortName' => $resource['vo']}, $resource['vo'])
+    $_filtered_data = $_tmp_attributes.filter |$key, $value| { $key =~ /:resource:/ }
 
-    if $_query_vo['id'] != undef {
-       $_vo_id = $_query_vo['id']
-    } else {
-       fail("No VO named ${resource['vo']}")
-    }
-  
-    $_query_res = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                 'resourcesManager', 'getResourceByName', {'vo' => $_vo_id, 'facility' => $_facility_id,
-                                                                           'name' => $resource['name']}, 
-                                                                           "${_vo_id}-${_facility_id}-${resource['name']}")
+    $_tmp_array = $_filtered_data.reduce([]) |Array $memo, Array $_item| {
+      $_attribute = perunapi::call($api_host, $api_user, $api_passwd, 'attributesManager', 'getAttribute',
+                                   { 'resource' => $_resource_id, 'attributeName' => $_item[0] }, $context)
 
-    if $_query_res['id'] == undef {
-       $_create_res = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                     'resourcesManager', 'createResource', 
-                                     {'resource' => {'name' => $resource['name'], 'description' => $resource['description']},
-                                      'vo' => $_vo_id, 'facility' => $_facility_id}, 'nocache')
-       perun_api_flushcache('resourcesManager', 'getResourceByName', "${_vo_id}-${_facility_id}-${resource['name']}")
+      if $_attribute['id'] {
+        $_newattr = $_item[1] ? {
+          'null' => undef,
+          default => $_item[1],
+        }
 
-       $_resource_id = $_create_res['id']
-
-       notify{"createResource${resource['name']}${resource['vo']}":
-         message => "created resource ${resource['name']} for VO ${resource['vo']}",
-       }
-    } else {
-       $_resource_id = $_query_res['id']
+        if $_attribute['value'] != $_newattr {
+          $memo + [merge($_attribute, { 'value' => $_newattr })]
+        } else {
+          # no change
+          $memo
+        }
+      } else {
+        notify { "Warning: undefined attribude name ${_item[0]}": }
+        $memo
+      }
     }
 
-    if $resource['tags'] != undef {
-       $_query_tags = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                       'resourcesManager', 'getAllResourcesTagsForResource', {'resource' => $_resource_id}, $_resource_id)
-       $_tags_name = $_query_tags.map |$_tag_obj| {
-          $_tag_obj['tagName']
-       }
-       
-       $_query_all_tags = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                        'resourcesManager', 'getAllResourcesTagsForVo', {'vo' => $_vo_id}, $resource['vo'])
-       
-       $resource['tags'].each |$_tag| {
-          if !($_tag in $_tags_name) {
-             $_tag_obj = $_query_all_tags.filter |$_t| {
-                 $_t['tagName'] == $_tag
-             }
-             if $_tag_obj == undef {
-                fail("Unknown tag: $_tag")
-             }
-             $_res = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                    'resourcesManager', 'assignResourceTagToResource', {'resourceTag' => $_tag_obj[0], 'resource' => $_resource_id}, 'nocache')
-             perun_api_flushcache('resourcesManager', 'getAllResourcesTagsForResource', $_resource_id)
-             notify{"setTagForResource${_resource_id}${_tag}":
-                message => "assigned resource tag ${_tag} to resource ${resource['name']}",
-             }
+    $_attributes_result = perunapi::call($api_host, $api_user, $api_passwd, 'attributesManager', 'setAttributes',
+                                         { 'resource' => $_resource_id, 'attributes' => $_final_array }, $context)
+
+    if $_attributes_result['timeout'] {
+      return()
+    }
+
+    if $_attributes_result['errorId'] and $_attributes_result['message'] {
+      fail("Cannot set attributes. Reason: ${_attributes_result['message']}")
+    }
+  }
+
+  ####
+
+  unless empty($services) {
+    $_pending_s = perunapi::callback($api_host, $api_user, $api_passwd, 'assignService', $context)
+    if $_pending_s['endTime'] == -1 {
+      notify { "assignServicesTimeout${_resource_id}":
+        message => "Pending assign service request. Giving up.",
+      }
+
+      return()
+    }
+
+    $services.each |$_service, $_service_value| {
+      if $resource['name'] in $_service_value['resources'] {
+        $_services_res = perunapi::call($api_host, $api_user, $api_passwd, 'resourcesManager', 'getAssignedServices',
+                                        { 'resource' => $_resource_id }, $context)
+
+        $_services_list = $_services_res.map |$_s| { $_s['name'] }
+
+        unless $_service in $_services_list {
+          $_service_result = perunapi::call($api_host, $api_user, $api_passwd, 'servicesManager', 'getServiceByName',
+                                            { 'name' => $_service }, $context)
+          if $_service_result['errorId'] and $_service_result['message'] {
+            fail("Cannot get service ${_service}")
           }
-       }
+
+          $_assign_resp = perunapi::call($api_host, $api_user, $api_passwd, 'resourcesManager', 'assignService',
+                                         { 'resource' => $_resource_id, 'service' => $_service_result['id'] }, $context)
+
+          if $_assign_resp['timeout'] {
+            notify { "assignService${_service}${_resource_id}_timeout":
+              message => "Assigned service ${_service} to resource ${resource['name']} timeout. Stopping assigning more services.",
+            }
+
+            return()
+          }
+
+          notify { "assignService${_service}${_resource_id}":
+            message => "Assigned service ${_service} to resource ${resource['name']} ${_assign_resp}",
+          }
+        }
+      }
+    }
+  }
+
+  ####
+
+  if $resource['groupsfromresource'] {
+    $_pending_g = perunapi::callback($api_host, $api_user, $api_passwd, 'assignGroupsToResource', $context)
+    if $_pending_g['endTime'] == -1 {
+      notify { "assignGroupsTimeout_${resource['groupsfromresource']}":
+        message => "Pending assign groups request. Giving up.",
+      }
+
+      return()
     }
 
-    $_tmp_attributes = merge($attributes, $resource['attributes'])
+    $_query_src = perunapi::call($api_host, $api_user, $api_passwd, 'resourcesManager', 'getAssignedGroups',
+                                 { 'resource' => $resource['groupsfromresource'] }, $context)
 
-    if $_tmp_attributes.keys.size > 0 { 
-       $_pending_a = perun_api_callback($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                        'setAttribute')
-       if $_pending_a != undef and $_pending_a['endTime'] == -1 {
-          notify{"setAttributeTimeout${_resource_id}":
-            message => "Pending set attribute request. Giving up.",
-          }
-          return()
-       }
-
-       $_filtered_data = $_tmp_attributes.filter |$key, $value| { $key =~ /:resource:/ }
-
-       $_tmp_array = $_filtered_data.reduce([]) |Array $memo, Array $_item| {
-
-             $_attribute = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                          'attributesManager', 'getAttribute', {'resource' => $_resource_id, 'attributeName' => $_item[0]}, $_item[0])
-
-             if $_item[1] == 'null' {
-                $_newattr = undef
-             } else {
-                $_newattr = $_item[1]
-             }
-
-             if $_attribute['id'] == undef {
-               notify{"Warning: undefined attribude name ${_item[0]}":}
-               $_result = []
-             } elsif $_attribute['value'] != $_newattr {
-               $_newval = {'value' => $_newattr}
-               $_result = [merge($_attribute, $_newval)]
-
-             }
-             $memo + $_result
-       }
-
-       $_final_array = $_tmp_array.filter |$_i| { $_i != undef }
-
-       $_res = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                              'attributesManager', 'setAttributes', { 'resource' => $_resource_id, 'attributes' => $_final_array }, 'nocache')
-
-
-       if $_res != undef and $_res['timeout'] == true {
-          return()
-       }
-
-       if $_res != undef and $_res['errorId'] != undef and $_res['message'] != undef {
-          fail("Cannot set attributes. Reason: ${_res['message']}")
-       }
-    }
-   
-    if $services.keys.size > 0 {
-       $_pending_s = perun_api_callback($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                        'assignService')
-       if $_pending_s != undef and $_pending_s['endTime'] == -1 {
-          notify{"assignServicesTimeout${_resource_id}":
-            message => "Pending assign service request. Giving up.",
-          }
-          return()
-       }
-
-       $services.keys.each |$_service| {
-          if $resource['name'] in $services[$_service]['resources'] {
-
-              $_services_res = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                             'resourcesManager', 'getAssignedServices', {'resource' => $_resource_id}, $_resource_id)
-
-              $_services_list = $_services_res.map |$_s| {
-                 $_s['name']
-              }
- 
-              if !($_service in $_services_list) {
-                 $_res = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                        'servicesManager', 'getServiceByName', {'name' => $_service}, $_service)
-                 if $_res['errorId'] != undef and $_res['message'] != undef {
-                    fail("Cannot get service $_service id")
-                 }
-                 $_service_id = $_res['id']
-
-                 $_assign_resp = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                                'resourcesManager', 'assignService', {'resource' => $_resource_id, 'service' => $_service_id}, 'nocache')
- 
-                 perun_api_flushcache('resourcesManager', 'getAssignedServices', $_resource_id)
-
-                 if $_assign_resp != undef and $_assign_resp['timeout'] == true {
-                    notify{"assignService${_service}${_resource_id}_timeout":
-                      message => "Assigned service ${_service} to resource ${resource['name']} timeout. Stopping assigning more services.",
-                    }
-                    return()
-                 }
- 
-                 notify{"assignService${_service}${_resource_id}":
-                    message => "assigned service ${_service} to resource ${resource['name']}\n$_assign_resp",
-                 }
-              }
-          }
-       }
+    if $_query_src['errorId'] and $_query_src['message'] {
+      fail("Cannot query source resource ${resource['groupsfromresource']} for groups. ${_query_src}")
     }
 
-    if $resource['groupsfromresource'] != undef {
-       $_pending_g = perun_api_callback($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                        'assignGroupsToResource')
-       if $_pending_g != undef and $_pending_g['endTime'] == -1 {
-          notify{"assignGroupsTimeout_${resource['groupsfromresource']}":
-            message => "Pending assign groups request. Giving up.",
-          }
-          return()
-       }
+    $_query_dst = perunapi::call($api_host, $api_user, $api_passwd, 'resourcesManager', 'getAssignedGroups',
+                                 { 'resource' => $_resource_id }, $context)
 
-       $_query_src = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                    'resourcesManager', 'getAssignedGroups', { 'resource' => $resource['groupsfromresource'] }, 'nocache')
+    $_add_groups = $_query_src - $_query_dst
 
-       if $_query_src != undef and $_query_src =~ Hash and $_query_src['errorId'] != undef and $_query_src['message'] != undef {
-          fail("Cannot query source resource ${resource['groupsfromresource']} for groups. ${_query_src}")
-       }
+    unless empty($_add_groups) {
+      $_add_g_ids = $_add_groups.map |$_gr| { $_gr['id'] }
+      $_res_gr = perunapi::call($api_host, $api_user, $api_passwd, 'resourcesManager', 'assignGroupsToResource',
+                                { 'resource' => $_resource_id, 'groups' => $_add_g_ids }, $context)
 
-       $_query_dst = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                    'resourcesManager', 'getAssignedGroups', { 'resource' => $_resource_id }, $_resource_id)
+      if $_res_gr['timeout'] {
+        notify { "assignGroupsToResource_timeout_${_resource_id}":
+          message => "Assign groups to resource ${resource['name']} timeout. Giving up",
+        }
 
-       $_add_groups = $_query_src - $_query_dst
+        return()
+      }
 
-       if $_add_groups.size > 0 {
-         $_add_g_ids = $_add_groups.map |$_gr| {
-           $_gr['id']
-         }
-
-         $_res_gr = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                   'resourcesManager', 'assignGroupsToResource', {'resource' => $_resource_id, 'groups' => $_add_g_ids}, 'nocache')
-
-         perun_api_flushcache('resourcesManager', 'getAssignedGroups', $_resource_id)
-         if $_res_gr != undef and $_res_gr['timeout'] == true {
-           notify{"assignGroupsToResource_timeout_${_resource_id}":
-             message => "assign groups to resource ${resource['name']} timeout. Giving up",
-           }
-           return()
-         }
-     
-         notify{"assignGroupsToResource${_resource_id}":
-            message => "assigned $_add_g_ids groups to resource ${resource['name']}\n${_res_gr}",
-         }
-       }
+      notify { "assignGroupsToResource${_resource_id}":
+        message => "Assigned ${_add_g_ids} groups to resource ${resource['name']} ${_res_gr}",
+      }
     }
   }
 }

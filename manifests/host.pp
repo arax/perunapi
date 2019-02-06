@@ -1,58 +1,54 @@
 define perunapi::host (
-                   $ensure   = 'present',
-  String           $hostname = $facts['fqdn'],
-  String           $cluster,
-  Hash $attributes           = {},
+  Stdlib::Fqdn              $cluster,
+  Stdlib::Fqdn              $hostname   = $facts['fqdn'],
+  Enum['present', 'absent'] $ensure     = 'present',
+  Hash                      $attributes = {},
 ) {
 
-  if $ensure == 'present' {
-    $_query_hosts = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                   'facilitiesManager', 'getHostsByHostname', { 'hostname' => $facts['fqdn']}, $facts['fqdn'])
+  if $ensure == 'absent' {
+    fail('Cannot remove Host via perunapi::host, use `puppet node deactivate FQDN`')
+  }
 
-    if $_query_hosts != undef {
-       $_host_ids = $_query_hosts.map |$_host| {
-          $_host['id']
-       }
-    }
+  $api_user   = $perunapi::perun_api_user
+  $api_host   = $perunapi::perun_api_host
+  $api_passwd = $perunapi::perun_api_password
 
-    if $attributes.keys.size > 0 {
-       $attributes.keys.each |$_attr| {
-          if $_attr =~ /:host:/ {
-             
-             $_host_ids.each |$_host_id| {
-                $_attribute = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                                             'attributesManager', 'getAttribute', {'host' => $_host_id, 'attributeName' => $_attr}, "${_host_id}${_attr}")
+  $_query_hosts = perunapi::call($api_host, $api_user, $api_passwd, 'facilitiesManager', 'getHostsByHostname',
+                                 { 'hostname' => $hostname }, $cluster)
+  $_host_ids = $_query_hosts.map |$_host| { $_host['id'] }
 
-                if $attributes[$_attr] == 'null' {
-                   $_newattr = undef
-                } elsif $attributes[$_attr] =~ String and $attributes[$_attr] =~ /^[0-9]*$/ {
-                   $_newattr = scanf("${attributes[$_attr]}", "%i")[0]
-                } else {
-                   $_newattr = $attributes[$_attr]
-                }
-                if $_attribute['id'] != undef and $_attribute['value'] != $_newattr {
-                   $_newval = {'value' => $_newattr}
-                   $_res = perun_api_call($perunapi::perun_api_host, $perunapi::perun_api_user, $perunapi::perun_api_password,
-                               'attributesManager', 'setAttribute', {'host' => $_host_id, 
-                                                                     'attribute' => merge($_attribute, $_newval)}, 'nocache')
+  $attributes.each |$_attr, $_attr_value| {
+    if $_attr =~ /:host:/ {
+      $_host_ids.each |$_host_id| {
+        $_attribute = perunapi::call($api_host, $api_user, $api_passwd, 'attributesManager', 'getAttribute',
+                                     { 'host' => $_host_id, 'attributeName' => $_attr }, $cluster)
 
-                   perun_api_flushcache('attributesManager', 'getAttribute', "${_host_id}${_attr}")
+        if $_attr_value == 'null' {
+          $_newattr = undef
+        } elsif $_attr_value =~ String and $_attr_value =~ /^[0-9]*$/ {
+          $_newattr = scanf("${attributes[$_attr]}", "%i")[0]
+        } else {
+          $_newattr = $_attr_value
+        }
 
-                   if $_res != undef and $_res['errorId'] != undef and $_res['message'] != undef {
-                      fail("Cannot set attribute: $_attr. Reason: ${_res['message']}")
-                   } else {
-                      notify{"setAttribute_${_attr}${_host_id}":
-                        message => "Setting attribute ${_attr} to value ${_newattr}.",
-                     }
-                  }
-                }
-                if $_attribute['id'] == undef {
-                   notify{"Warning: undefined attribute name $_attr for host $_host_id":}
-                   perun_api_flushcache('attributesManager', 'getAttribute', "${_host_id}${_attr}")
-                }
+        if $_attribute['id'] and $_attribute['value'] != $_newattr {
+          $_newval = { 'value' => $_newattr }
+          $_res = perunapi::call($api_host, $api_user, $api_passwd, 'attributesManager', 'setAttribute',
+                                 { 'host' => $_host_id, 'attribute' => merge($_attribute, $_newval) }, $cluster)
+
+          if $_res['errorId'] and $_res['message'] {
+            fail("Cannot set attribute: ${_attr}. Reason: ${_res['message']}")
+          } else {
+            notify { "setAttribute_${_attr}${_host_id}":
+              message => "Setting attribute ${_attr} to value ${_newattr}.",
             }
           }
-       }
-    }   
+        }
+
+        unless $_attribute['id'] {
+          notify { "Warning: undefined attribute name $_attr for host $_host_id": }
+        }
+      }
+    }
   }
 }
