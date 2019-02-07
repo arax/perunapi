@@ -8,8 +8,9 @@ class perunapi (
 
   $_perunapi = lookup('perunapi')
 
-  if empty($_perunapi['facility']) {
-    fail('Facility not specified, cannot continue')
+  if empty($_perunapi) or empty($_perunapi['facility']) {
+    notify { "No parameters or missing Facility for PerunAPI, skipping": }
+    return()
   }
 
   $_query = perunapi::call(
