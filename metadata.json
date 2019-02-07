@@ -1,12 +1,12 @@
 {
-  "name": "perunapi",
+  "name": "arax-perunapi",
   "version": "0.1.0",
-  "author": "ceritsc",
-  "summary": "Perun API",
+  "author": "arax",
+  "summary": "Perun API module refactored from CERIT-SC perunapi",
   "license": "MIT",
-  "source": "https://github.com/CERIT-SC/perunapi.git",
-  "project_page": "https://github.com/CERIT-SC/perunapi",
-  "issues_url": "https://github.com/CERIT-SC/perunapi/issues",
+  "source": "https://github.com/arax/perunapi.git",
+  "project_page": "https://github.com/arax/perunapi",
+  "issues_url": "https://github.com/arax/perunapi/issues",
   "dependencies": [
     {
       "name": "puppetlabs/stdlib",
