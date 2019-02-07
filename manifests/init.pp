@@ -6,7 +6,7 @@ class perunapi (
   Stdlib::Fqdn $cluster            = $perunapi::params::cluster,
 ) inherits ::perunapi::params {
 
-  $_perunapi = lookup('perunapi')
+  $_perunapi = lookup('perunapi', { 'default_value' => {} })
 
   if empty($_perunapi) or empty($_perunapi['facility']) {
     notify { "No parameters or missing Facility for PerunAPI, skipping": }
