@@ -38,10 +38,10 @@ Puppet::Functions.create_function(:'perunapi::callback') do
          response = http.request(req)
 
          unless ['200', '400'].include?(response.code)
-           raise Puppet::ParseError, "perun_api_get(): #{response.code} - #{response.body}"
+           raise Puppet::ParseError, "perun_api_get(#{uri}): #{response.code} - #{response.body}"
          end
        rescue Timeout::Error => _e
-         raise Puppet::ParseError, "perun_api_get(): call to #{uri} timed out"
+         raise Puppet::ParseError, "perun_api_get(#{uri}): call timed out"
        end
 
        ret = response.body.sub(/^[^\(]*\((.*)\);/, '\1')

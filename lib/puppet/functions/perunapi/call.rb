@@ -50,7 +50,7 @@ Puppet::Functions.create_function(:'perunapi::call') do
         f.close
 
         unless ['200', '400'].include?(response.code)
-          raise Puppet::ParseError, "perun_api_post(): #{response.code} - #{response.body}"
+          raise Puppet::ParseError, "perun_api_post(#{uri}): #{response.code} - #{response.body}"
         end
       rescue Timeout::Error => _e
         return { timeout: true }
