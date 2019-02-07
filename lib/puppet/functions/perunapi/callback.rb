@@ -22,8 +22,8 @@ Puppet::Functions.create_function(:'perunapi::callback') do
 
   # :nodoc:
   def perun_callback(host, user, password, method, context)
-    path = '/var/lib/puppet/perun_cache/'
-    Dir.mkdir(path, 0700) unless Puppet::FileSystem.exist?(path)
+    path = '/var/run/puppetlabs/puppetserver'
+    Dir.mkdir(path, 0755) unless Puppet::FileSystem.exist?(path)
 
     cookiefile = "#{path}/#{context}-cookie"
     cookie = Puppet::FileSystem.exist?(cookiefile) ? File.read(cookiefile) : ''

@@ -26,8 +26,8 @@ Puppet::Functions.create_function(:'perunapi::call') do
   def perun_call(hostname, user, password, manager, method, request, context)
     request = request.to_json.gsub(/"undef"/, "null")
 
-    path = '/var/lib/puppet/perun_cache/'
-    Dir.mkdir(path, 0700) unless Puppet::FileSystem.exist?(path)
+    path = '/var/run/puppetlabs/puppetserver'
+    Dir.mkdir(path, 0755) unless Puppet::FileSystem.exist?(path)
 
     cookiefile = "#{path}/#{context}-cookie"
     cookie = Puppet::FileSystem.exist?(cookiefile) ? File.read(cookiefile) : ''
