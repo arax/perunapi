@@ -10,14 +10,14 @@ Puppet::Functions.create_function(:'perunapi::callback') do
   # @example
   #    perunapi::callback(host, user, password, method, context)
   #
-  # @return [Hash] Call result
+  # @return [Variant[Hash, Array]] Call result
   dispatch :perun_callback do
     param 'Stdlib::Fqdn', :host
     param 'String',       :user
     param 'String',       :password
     param 'String',       :method
     param 'String',       :context
-    return_type 'Hash'
+    return_type 'Variant[Hash, Array]'
   end
 
   # :nodoc:

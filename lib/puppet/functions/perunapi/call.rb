@@ -10,7 +10,7 @@ Puppet::Functions.create_function(:'perunapi::call') do
   # @example
   #    perunapi::call(host, user, password, manager, method, request, context)
   #
-  # @return [Hash] Call result
+  # @return [Variant[Hash, Array]] Call result
   dispatch :perun_call do
     param 'Stdlib::Fqdn', :host
     param 'String',       :user
@@ -19,7 +19,7 @@ Puppet::Functions.create_function(:'perunapi::call') do
     param 'String',       :method
     param 'Hash',         :request
     param 'String',       :context
-    return_type 'Hash'
+    return_type 'Variant[Hash, Array]'
   end
 
   # :nodoc:
