@@ -220,7 +220,7 @@ define perunapi::resource (
       { 'resource' => $resource['groupsfromresource'] }, $context
     )
 
-    if $_query_src['errorId'] and $_query_src['message'] {
+    if $_query_src =~ Hash and  $_query_src['errorId'] and $_query_src['message'] {
       fail("Cannot query source resource ${resource['groupsfromresource']} for groups. ${_query_src}")
     }
 
@@ -228,6 +228,10 @@ define perunapi::resource (
       $api_host, $api_user, $api_passwd, 'resourcesManager', 'getAssignedGroups',
       { 'resource' => $_resource_id }, $context
     )
+
+    if $_query_dst =~ Hash and  $_query_dst['errorId'] and $_query_dst['message'] {
+      fail("Cannot query destination resource ${_resource_id} for groups. ${_query_dst}")
+    }
 
     $_add_groups = $_query_src - $_query_dst
     unless empty($_add_groups) {
