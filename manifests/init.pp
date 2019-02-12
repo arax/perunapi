@@ -9,7 +9,7 @@ class perunapi (
   $_perunapi = lookup('perunapi', { 'default_value' => {} })
 
   if empty($_perunapi) or empty($_perunapi['facility']) {
-    notify { "No parameters or missing Facility for PerunAPI, skipping": }
+    notify { 'No parameters or missing Facility for PerunAPI, skipping': }
     return()
   }
 

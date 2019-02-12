@@ -26,7 +26,7 @@ define perunapi::facility (
   )
 
   if $_query['name'] == 'FacilityNotExistsException' {
-    notify { 'create_facility':
+    notify { "createFacility${title}":
       message => "Creating facility ${title}",
     }
 
@@ -59,7 +59,7 @@ define perunapi::facility (
   $_add_adm_users = $manager['users'] - $_adm_users
 
   $_add_adm_users.each |$_user| {
-    notify{ 'addAdmins':
+    notify{ "addAdmin${_user}":
       message => "Adding admin user ${_user}",
     }
 
@@ -89,7 +89,7 @@ define perunapi::facility (
   $_add_adm_groups = $manager['groups'] - $_adm_groups
 
   $_add_adm_groups.each |$_group| {
-    notify{ 'addAdminGroups':
+    notify{ "addAdminGroup${_group}":
       message => "Adding admin group ${_group}",
     }
 
@@ -122,7 +122,7 @@ define perunapi::facility (
     $_add_owner_ids = $_all_owners.filter |$_owner| { $_owner['name'] in $_add_owners }.map |$_owner| { $_owner['id'] }
 
     $_add_owner_ids.each |$_id| {
-      notify { 'addOwners':
+      notify { "addOwner${_id}":
         message => "Adding owner with ID ${_id} to facility ${title}",
       }
 
